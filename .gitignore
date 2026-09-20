@@ -27,3 +27,4 @@ session_readable.md
 *.hdf5
 cache/
 data/
+checkpoints/
