@@ -1,0 +1,29 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# macOS system files
+.DS_Store
+
+# Temporary / Session logs
+*.log
+session_exported.json
+session-ses_f74a.md
+session_readable.md
+
+# Large dataset caches (DICOM / raw arrays)
+*.dcm
+*.nii
+*.nii.gz
+*.h5
+*.hdf5
+cache/
+data/
