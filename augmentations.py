@@ -72,7 +72,9 @@ class VolumeConsistentAugmenter:
             mean = series_tensor.mean()
             std = series_tensor.std() + 1e-6
             norm = (series_tensor - mean) / std
-            series_tensor = torch.clamp((norm * gain) ** gamma, -3.0, 3.0)
+            # Gamma on the magnitude: a negative base with fractional gamma would produce NaNs
+            scaled = norm * gain
+            series_tensor = torch.clamp(torch.sign(scaled) * scaled.abs() ** gamma, -3.0, 3.0)
 
         return series_tensor
 

@@ -66,8 +66,9 @@ class KneeMRIDataset(Dataset):
         else:
             arr = np.load(file_path)
 
-        # Convert to float32 tensor
-        tensor = torch.from_numpy(arr).float()
+        # Convert to float32 tensor; M1's cache stores uint8 0..255 -> rescale to [0, 1]
+        tensor = torch.from_numpy(arr)
+        tensor = tensor.float() / 255.0 if tensor.dtype == torch.uint8 else tensor.float()
 
         # Ensure (K, C, H, W) shape
         if tensor.dim() == 3:
@@ -83,7 +84,8 @@ class KneeMRIDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Dict[str, Union[torch.Tensor, str, Dict[str, torch.Tensor]]]:
         row = self.df.iloc[idx]
-        study_id = row.get("study_id", f"study_{idx}")
+        # Kaggle CSVs use StudyInstanceUID; keep study_id for older synthetic frames
+        study_id = row.get("StudyInstanceUID", row.get("study_id", f"study_{idx}"))
 
         # Load each plane
         series_dict = {}
@@ -95,11 +97,14 @@ class KneeMRIDataset(Dataset):
         # Apply volume-consistent augmentations
         series_dict = self.augmenter(series_dict)
 
-        # Extract targets if available
-        if self.target_cols:
+        # Extract targets if available. NaN = unlabeled finding; the training engine masks it out of the loss.
+        if len(self.target_cols) == len(ABNORMALITIES):
             targets = torch.tensor([row[c] for c in self.target_cols], dtype=torch.float32)
+        elif self.target_cols:
+            missing = sorted(set(ABNORMALITIES) - set(self.target_cols))
+            raise KeyError(f"Label columns missing from dataframe: {missing}")
         else:
-            targets = torch.zeros(len(ABNORMALITIES), dtype=torch.float32)
+            targets = torch.full((len(ABNORMALITIES),), float("nan"), dtype=torch.float32)
 
         return {
             "study_id": str(study_id),

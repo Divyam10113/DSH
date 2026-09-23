@@ -12,6 +12,7 @@ from .pooling import GatedAttentionPooling, MultiHeadSlicePooling
 from .fusion import ConcatFusion, CrossPlaneTransformerFusion
 
 
+# Must match the Kaggle train.csv / submission.csv column names and order exactly
 ABNORMALITIES = [
     "ACL",
     "MCL",
@@ -20,10 +21,10 @@ ABNORMALITIES = [
     "Medial OA",
     "Lateral OA",
     "PF OA",
-    "Joint Effusion",
+    "Effusion",
     "Synovitis",
-    "Baker's Cyst",
-    "Bone Contusion",
+    "Baker's",
+    "Contusion",
     "Fracture"
 ]
 
