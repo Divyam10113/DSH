@@ -1,0 +1,18 @@
+# Training / inference (Kaggle images already ship torch, torchvision, numpy, pandas, scikit-learn)
+torch>=2.1
+torchvision>=0.16
+numpy
+pandas
+scikit-learn
+pillow
+# DICOM decoding for every transfer syntax in the dataset (bundled as offline wheels for submission)
+pydicom>=2.4
+pylibjpeg
+pylibjpeg-libjpeg
+pylibjpeg-openjpeg
+python-gdcm
+# Dev / reporting
+pytest
+tabulate
+# Optional experiment tracking
+# wandb

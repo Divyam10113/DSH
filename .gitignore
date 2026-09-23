@@ -28,3 +28,10 @@ session_readable.md
 cache/
 data/
 checkpoints/
+
+# M4 run artefacts
+runs/
+experiments.csv
+submission.csv
+oof*.csv
+wheels/
