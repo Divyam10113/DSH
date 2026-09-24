@@ -94,7 +94,11 @@ class CrossPlaneTransformerFusion(nn.Module):
             activation="gelu",
             batch_first=True
         )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.transformer = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers,
+            enable_nested_tensor=False
+        )
         self.study_token = nn.Parameter(torch.randn(1, 1, embed_dim))
         self.norm = nn.LayerNorm(embed_dim)
 
