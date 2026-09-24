@@ -1,0 +1,9 @@
+numpy
+pandas
+scikit-learn
+scipy
+# Optional (GPU dev notebooks): XLM-R classifier and opus-mt translation
+# torch
+# transformers
+# sentencepiece
+# langdetect
