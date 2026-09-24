@@ -6,7 +6,11 @@
 #   KAGGLE_USER=<your-username> bash scripts/push_code_dataset.sh "message"
 set -euo pipefail
 
-: "${KAGGLE_USER:?set KAGGLE_USER to the Kaggle account that owns the dataset}"
+if [ -z "${KAGGLE_USER:-}" ] && [ -f "$HOME/.kaggle/kaggle.json" ]; then
+    KAGGLE_USER="$(python3 -c "import json; print(json.load(open('$HOME/.kaggle/kaggle.json')).get('username', ''))" 2>/dev/null || true)"
+fi
+
+: "${KAGGLE_USER:?set KAGGLE_USER or ensure ~/.kaggle/kaggle.json has a valid username}"
 MSG="${1:-update $(git rev-parse --short HEAD 2>/dev/null || date +%F)}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGE="$(mktemp -d)"
