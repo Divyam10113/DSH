@@ -86,3 +86,45 @@ def test_trains_on_m2_labels_file(tmp_path):
     folds = make_folds(df, n_folds=3)
     score = run_training(df=df, folds=folds, fold="0", cfg=_cfg(tmp_path, epochs=1))
     assert np.isfinite(score)
+
+
+@pytest.mark.parametrize("pooling,fusion", [("gated", "concat"), ("mha", "transformer")])
+def test_missing_plane_in_mixed_batch_is_finite(pooling, fusion):
+    """Study B has no axial series while A does: B's mask row is all padding, which used to give NaN."""
+    from dataset import knee_collate_fn
+    from train import build_model
+    torch.manual_seed(0)
+    a = {"study_id": "A", "series": {p: torch.rand(8, 1, 32, 32) for p in ("sagittal", "coronal", "axial")},
+         "targets": torch.zeros(12)}
+    b = {"study_id": "B", "series": {p: torch.rand(6, 1, 32, 32) for p in ("sagittal", "coronal")},
+         "targets": torch.zeros(12)}
+    series, masks, _, _ = knee_collate_fn([a, b])
+    model = build_model(TrainConfig(embed_dim=64, img_size=32, pooling_type=pooling, fusion_type=fusion))
+    logits, _, _ = model(series, masks)
+    logits.sum().backward()
+    assert torch.isfinite(logits).all()
+    assert all(torch.isfinite(p.grad).all() for p in model.parameters() if p.grad is not None)
+
+
+def test_missing_cache_dir_fails_loudly(tmp_path):
+    df = make_synthetic_df(8)
+    with pytest.raises(FileNotFoundError):
+        run_training(df=df, data_dir=str(tmp_path / "no_such_cache"), folds=make_folds(df, n_folds=2),
+                     fold="0", cfg=_cfg(tmp_path, epochs=1))
+
+
+def test_trains_on_uint8_cache_with_missing_planes(tmp_path):
+    """Real on-disk cache layout (knee_dicom: uint8 {study}/{plane}.npy) where some studies lack planes."""
+    df = make_synthetic_df(12)
+    rng = np.random.RandomState(0)
+    cache = tmp_path / "cache"
+    for i, sid in enumerate(df[ID_COL]):
+        planes = ("sagittal", "coronal", "axial") if i % 3 else ("sagittal",)  # every 3rd study: one plane only
+        (cache / sid).mkdir(parents=True)
+        for p in planes:
+            np.save(cache / sid / f"{p}.npy", rng.randint(0, 256, (int(rng.randint(5, 9)), 32, 32), dtype=np.uint8))
+    score = run_training(df=df, data_dir=str(cache), folds=make_folds(df, n_folds=3), fold="0",
+                         cfg=_cfg(tmp_path, epochs=1, batch_size=4))
+    assert np.isfinite(score)
+    oof = pd.read_csv(tmp_path / "ck" / "t" / "fold0" / "oof.csv")
+    assert np.isfinite(oof[ABNORMALITIES].values).all()

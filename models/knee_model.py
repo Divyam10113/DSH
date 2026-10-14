@@ -147,8 +147,16 @@ class KneeMultiSeriesModel(nn.Module):
 
             # Attention pool over K slices
             mask = masks_dict.get(plane_name) if masks_dict is not None else None
+            # A study missing this plane in a mixed batch has an all-padding mask row;
+            # softmax over all -inf would return NaN, so unmask one slot and zero its embedding
+            empty = mask.all(dim=1) if mask is not None else None  # (B,)
+            if empty is not None and empty.any():
+                mask = mask.clone()
+                mask[empty, 0] = False
             pooled, attn = self.pooling_layers[plane_name](slice_features, mask=mask)
-            
+            if empty is not None and empty.any():
+                pooled = pooled.masked_fill(empty[:, None], 0.0)  # same as a missing plane
+
             series_embeddings[plane_name] = pooled
             attn_maps[plane_name] = attn.squeeze(-1) if attn.dim() == 3 else attn
 
