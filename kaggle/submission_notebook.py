@@ -4,7 +4,7 @@
 # 1. the competition data
 # 2. `knee-code`    : this repo, published with scripts/push_code_dataset.sh
 # 3. `knee-wheels`  : offline wheels built with scripts/build_offline_wheels.sh
-# 4. one dataset per model run with `fold*/best.pth` (+ optional `ensemble.json`)
+# 4. the per-fold weight datasets `knee-weights-effb0-fold0` .. `fold4` (each holds `fold<k>/best.pth`)
 #
 # Nothing here touches the internet: models are rebuilt with pretrained=False and loaded from disk.
 
@@ -13,10 +13,10 @@ COMP = "/kaggle/input/rsna-knee-abnormality-detection"
 CODE = "/kaggle/input/knee-code"
 WHEELS = "/kaggle/input/knee-wheels"
 MODELS = {
-    "effb0": "/kaggle/input/knee-weights-effb0/*/best.pth",
-    # "convnext": "/kaggle/input/knee-weights-convnext/*/best.pth",
+    "effb0": "/kaggle/input/knee-weights-effb0-fold*/*/best.pth",  # averages every fold found
+    # "resnet34": "/kaggle/input/knee-weights-resnet34-fold*/*/best.pth",
 }
-ENSEMBLE_JSON = "/kaggle/input/knee-weights-effb0/ensemble.json"  # optional; equal-weight mean if missing
+ENSEMBLE_JSON = None  # with 2+ models: path to ensemble.json from `ensemble.py fit`; None = equal-weight mean
 TIME_BUDGET_HOURS = 8.0  # safety margin under the 9 h hard limit
 
 # %%

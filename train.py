@@ -304,7 +304,10 @@ def run_fold(df: pd.DataFrame, folds: pd.DataFrame, cfg: TrainConfig, data_dir: 
     print(f"[Training Engine] train={len(train_df)} val={len(val_df)} "
           f"(val gold-labeled={int(val_gold.notna().any(axis=1).sum())}, sample weights={'on' if weight_map else 'off'})")
 
-    synthetic = data_dir is None or not os.path.exists(data_dir)
+    # Synthetic tensors only when no data dir is given; a wrong path must fail, not train on noise
+    if data_dir is not None and not os.path.isdir(data_dir):
+        raise FileNotFoundError(f"data_dir {data_dir!r} does not exist; attach the image cache dataset")
+    synthetic = data_dir is None
     size = (cfg.img_size, cfg.img_size)
     train_ds = KneeMRIDataset(train_df, data_dir=data_dir, is_training=True, img_size=size, synthetic_mode=synthetic)
     val_ds = KneeMRIDataset(val_df, data_dir=data_dir, is_training=False, img_size=size, synthetic_mode=synthetic)

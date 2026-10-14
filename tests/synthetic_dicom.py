@@ -7,7 +7,7 @@ Series are written in the competition's transfer syntaxes: Explicit VR LE, Impli
 JPEG 2000 (pylibjpeg-openjpeg encoder) and JPEG Lossless (transcoded with GDCM when available).
 """
 
-from __future__ annotations
+from __future__ import annotations
 
 import shutil
 import tempfile
