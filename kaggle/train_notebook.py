@@ -12,18 +12,43 @@
 # %%
 REPO = "https://github.com/Divyam10113/DSH.git"
 BRANCH = "feat/m3-modeling"
-COMP = "/kaggle/input/rsna-knee-abnormality-detection"
-CACHE = "/kaggle/input/knee-cache-v1"          # M1 cache (python -m knee_dicom.cache): {StudyInstanceUID}/{plane}.npy
-LABELS = "/kaggle/input/knee-labels-v1/labels.csv"  # M2 merged labels (gold > pseudo, __true flags, sample_weight)
-FOLDS = "/kaggle/input/knee-folds/folds.csv"    # shared folds, created ONCE with validation.py
-FOLD = "0"                                      # "0".."4" or "all"
+# Custom dataset paths (leave empty string to auto-discover under /kaggle/input)
+COMP_DIR = ""                                   # auto-finds rsna-knee-abnormality-detection
+CACHE_DIR = ""                                  # auto-finds knee-cache-v1
+LABELS_PATH = ""                                # auto-finds knee-labels-v1/labels.csv
+FOLDS_PATH = ""                                 # auto-finds knee-folds/folds.csv
+FOLD = "1"                                      # "0".."4" or "all"
 RUN_NAME = "effb0_gated_concat"
 RESUME_FROM = ""                                # e.g. /kaggle/input/<prev-output>/checkpoints/<run>/fold0/last.pth
 MAX_HOURS = 8.5                                 # below the session limit, leaves time to save outputs
 SMOKE = False                                   # True: 200 studies, 1 epoch, to check the pipeline before a full run
 
 # %%
-import os, subprocess, sys
+import glob, os, subprocess, sys
+
+def find_input(name: str, explicit: str = "", is_file: bool = False) -> str:
+    """Finds input path whether mounted as /kaggle/input/<name>, /kaggle/input/datasets/*/<name>,
+    or /kaggle/input/competitions/<name>."""
+    if explicit:
+        return explicit
+    legacy = f"/kaggle/input/{name}"
+    if is_file and os.path.isfile(legacy):
+        return legacy
+    if not is_file and os.path.isdir(legacy):
+        return legacy
+    comp = f"/kaggle/input/competitions/{name}"
+    if is_file and os.path.isfile(comp):
+        return comp
+    if not is_file and os.path.isdir(comp):
+        return comp
+    matches = sorted(glob.glob(f"/kaggle/input/**/{name}", recursive=True))
+    for m in matches:
+        if is_file and os.path.isfile(m):
+            return m
+        if not is_file and os.path.isdir(m):
+            return m
+    return legacy
+
 if not os.path.exists("/kaggle/working/DSH"):
     subprocess.run(["git", "clone", "--depth", "1", "-b", BRANCH, REPO, "/kaggle/working/DSH"], check=True)
 sys.path.insert(0, "/kaggle/working/DSH")
@@ -33,7 +58,18 @@ os.chdir("/kaggle/working")
 import pandas as pd
 from train import TrainConfig, run_training
 
-assert os.path.isdir(CACHE), f"Image cache not attached: {CACHE}"
+COMP = find_input("rsna-knee-abnormality-detection", COMP_DIR)
+CACHE = find_input("knee-cache-v1", CACHE_DIR)
+LABELS = find_input("labels.csv", LABELS_PATH, is_file=True)
+FOLDS = find_input("folds.csv", FOLDS_PATH, is_file=True)
+
+print(f"Resolved input paths:")
+print(f"  COMP:   {COMP} (exists: {os.path.exists(COMP)})")
+print(f"  CACHE:  {CACHE} (exists: {os.path.exists(CACHE)})")
+print(f"  LABELS: {LABELS} (exists: {os.path.exists(LABELS)})")
+print(f"  FOLDS:  {FOLDS} (exists: {os.path.exists(FOLDS)})")
+
+assert os.path.isdir(CACHE), f"Image cache not attached: {CACHE} (available in /kaggle/input: {glob.glob('/kaggle/input/*')})"
 labels_csv = LABELS if os.path.exists(LABELS) else f"{COMP}/train.csv"  # before M2 delivers: gold labels only
 df = pd.read_csv(labels_csv)
 folds = pd.read_csv(FOLDS) if os.path.exists(FOLDS) else None
