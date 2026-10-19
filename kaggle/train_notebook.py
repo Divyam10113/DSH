@@ -26,28 +26,56 @@ SMOKE = False                                   # True: 200 studies, 1 epoch, to
 # %%
 import glob, os, subprocess, sys
 
-def find_input(name: str, explicit: str = "", is_file: bool = False) -> str:
-    """Finds input path whether mounted as /kaggle/input/<name>, /kaggle/input/datasets/*/<name>,
-    or /kaggle/input/competitions/<name>."""
-    if explicit:
+def find_comp(explicit: str = "") -> str:
+    if explicit and os.path.isdir(explicit):
         return explicit
-    legacy = f"/kaggle/input/{name}"
-    if is_file and os.path.isfile(legacy):
-        return legacy
-    if not is_file and os.path.isdir(legacy):
-        return legacy
-    comp = f"/kaggle/input/competitions/{name}"
-    if is_file and os.path.isfile(comp):
-        return comp
-    if not is_file and os.path.isdir(comp):
-        return comp
-    matches = sorted(glob.glob(f"/kaggle/input/**/{name}", recursive=True))
-    for m in matches:
-        if is_file and os.path.isfile(m):
+    for p in ("/kaggle/input/competitions/rsna-knee-abnormality-detection",
+              "/kaggle/input/rsna-knee-abnormality-detection"):
+        if os.path.isdir(p):
+            return p
+    for m in glob.glob("/kaggle/input/**/rsna-knee-abnormality-detection", recursive=True):
+        if os.path.isdir(m):
             return m
-        if not is_file and os.path.isdir(m):
+    return "/kaggle/input/competitions/rsna-knee-abnormality-detection"
+
+def find_cache(explicit: str = "") -> str:
+    if explicit and os.path.isdir(explicit):
+        return explicit
+    for p in ("/kaggle/input/notebooks/aryachauhan5/m1-knee-cache-build/knee_cache",
+              "/kaggle/input/m1-knee-cache-build/knee_cache",
+              "/kaggle/input/knee_cache",
+              "/kaggle/input/knee-cache-v1"):
+        if os.path.isdir(p):
+            return p
+    for m in sorted(glob.glob("/kaggle/input/**/manifest.csv", recursive=True)):
+        return os.path.dirname(m)
+    for m in sorted(glob.glob("/kaggle/input/**/knee_cache", recursive=True)):
+        if os.path.isdir(m):
             return m
-    return legacy
+    return "/kaggle/input/notebooks/aryachauhan5/m1-knee-cache-build/knee_cache"
+
+def find_labels(explicit: str = "") -> str:
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    for p in ("/kaggle/input/datasets/aryachauhan5/knee-labels-v1/labels.csv",
+              "/kaggle/input/knee-labels-v1/labels.csv"):
+        if os.path.isfile(p):
+            return p
+    for m in sorted(glob.glob("/kaggle/input/**/labels.csv", recursive=True)):
+        if "rsna-knee-abnormality-detection" not in m:
+            return m
+    return "/kaggle/input/datasets/aryachauhan5/knee-labels-v1/labels.csv"
+
+def find_folds(explicit: str = "") -> str:
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    for p in ("/kaggle/input/datasets/pranavlorekar4096/knee-folds/folds.csv",
+              "/kaggle/input/knee-folds/folds.csv"):
+        if os.path.isfile(p):
+            return p
+    for m in sorted(glob.glob("/kaggle/input/**/folds.csv", recursive=True)):
+        return m
+    return "/kaggle/input/datasets/pranavlorekar4096/knee-folds/folds.csv"
 
 if not os.path.exists("/kaggle/working/DSH"):
     subprocess.run(["git", "clone", "--depth", "1", "-b", BRANCH, REPO, "/kaggle/working/DSH"], check=True)
@@ -58,10 +86,10 @@ os.chdir("/kaggle/working")
 import pandas as pd
 from train import TrainConfig, run_training
 
-COMP = find_input("rsna-knee-abnormality-detection", COMP_DIR)
-CACHE = find_input("knee-cache-v1", CACHE_DIR)
-LABELS = find_input("labels.csv", LABELS_PATH, is_file=True)
-FOLDS = find_input("folds.csv", FOLDS_PATH, is_file=True)
+COMP = find_comp(COMP_DIR)
+CACHE = find_cache(CACHE_DIR)
+LABELS = find_labels(LABELS_PATH)
+FOLDS = find_folds(FOLDS_PATH)
 
 print(f"Resolved input paths:")
 print(f"  COMP:   {COMP} (exists: {os.path.exists(COMP)})")
@@ -69,7 +97,7 @@ print(f"  CACHE:  {CACHE} (exists: {os.path.exists(CACHE)})")
 print(f"  LABELS: {LABELS} (exists: {os.path.exists(LABELS)})")
 print(f"  FOLDS:  {FOLDS} (exists: {os.path.exists(FOLDS)})")
 
-assert os.path.isdir(CACHE), f"Image cache not attached: {CACHE} (available in /kaggle/input: {glob.glob('/kaggle/input/*')})"
+assert os.path.isdir(CACHE), f"Image cache not found at {CACHE}. Attach notebook 'm1-knee-cache-build' via Add Input -> Notebooks. Available inputs: {glob.glob('/kaggle/input/*')}"
 labels_csv = LABELS if os.path.exists(LABELS) else f"{COMP}/train.csv"  # before M2 delivers: gold labels only
 df = pd.read_csv(labels_csv)
 folds = pd.read_csv(FOLDS) if os.path.exists(FOLDS) else None
