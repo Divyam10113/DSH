@@ -20,7 +20,7 @@ import glob
 import json
 import os
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -68,28 +68,42 @@ class TestStudyDataset(Dataset):
         return sid, series
 
 
-def load_models(model_globs: Dict[str, str], device: torch.device):
+def load_models(model_globs: Dict[str, Union[str, List[str]]], device: torch.device):
     """
     name -> list of (model, img_size, max_slices); each glob usually matches the K fold checkpoints of one run.
+    A value may be one glob or a list of globs (`**` matches any depth). Smoke-test runs are skipped and
+    each (run_name, fold) is loaded once, so a fold published twice can't be double-counted in the average.
     """
     groups = {}
-    for name, pattern in model_globs.items():
-        paths = sorted(glob.glob(pattern))
+    for name, patterns in model_globs.items():
+        patterns = [patterns] if isinstance(patterns, str) else list(patterns)
+        paths = sorted({p for pat in patterns for p in glob.glob(pat, recursive=True)})
         if not paths:
-            raise FileNotFoundError(f"No checkpoints match {pattern} for model '{name}'")
-        loaded = []
+            raise FileNotFoundError(f"No checkpoints match {patterns} for model '{name}'")
+        loaded, seen = [], {}
         for p in paths:
             state = torch.load(p, map_location="cpu", weights_only=False)
             if state.get("labels", ABNORMALITIES) != ABNORMALITIES:
                 raise ValueError(f"{p} was trained with a different label order: {state.get('labels')}")
             cfg = config_from_dict(state["config"])
+            if cfg.run_name.endswith("_smoke"):
+                print(f"[inference] skip smoke-test checkpoint {p}")
+                continue
+            key = (cfg.run_name, cfg.fold)
+            if key in seen:
+                print(f"[inference] WARNING: skip duplicate of {cfg.run_name} fold {cfg.fold}: {p} (kept {seen[key]})")
+                continue
+            seen[key] = p
             model = build_model(cfg, pretrained=False)
             model.load_state_dict(state["model"])
             model.to(device).eval()
             if device.type == "cuda":
                 model.half()
             loaded.append((model, (cfg.img_size, cfg.img_size), cfg.max_slices))
-            print(f"[inference] loaded {name}: {p} (backbone={cfg.backbone_name}, img={cfg.img_size})")
+            print(f"[inference] loaded {name}: {p} (backbone={cfg.backbone_name}, img={cfg.img_size}, fold={cfg.fold})")
+        if not loaded:
+            raise FileNotFoundError(f"Only smoke-test checkpoints match {patterns} for model '{name}'")
+        print(f"[inference] {name}: {len(loaded)} checkpoint(s), folds {sorted(k[1] for k in seen)}")
         groups[name] = loaded
     return groups
 

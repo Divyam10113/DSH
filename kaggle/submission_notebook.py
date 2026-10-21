@@ -22,7 +22,9 @@ def find_input(name: str, fallback: str = "", is_file: bool = False) -> str:
         return comp
     if not is_file and os.path.isdir(comp):
         return comp
-    matches = sorted(glob.glob(f"/kaggle/input/**/{name}", recursive=True))
+    # Datasets / notebook outputs mount at /kaggle/input/{datasets,notebooks}/<user>/<name>: check that
+    # first, because the recursive search below walks all 570 GB of scans and takes minutes
+    matches = sorted(glob.glob(f"/kaggle/input/*/*/{name}")) or sorted(glob.glob(f"/kaggle/input/**/{name}", recursive=True))
     for m in matches:
         if is_file and os.path.isfile(m):
             return m
@@ -34,10 +36,12 @@ COMP = find_input("rsna-knee-abnormality-detection", "/kaggle/input/rsna-knee-ab
 CODE = find_input("knee-code", "/kaggle/input/knee-code")
 WHEELS = find_input("knee-wheels", "/kaggle/input/knee-wheels")
 
-MODELS = {
-    "effb0": "/kaggle/input/**/knee-weights-effb0-fold*/**/best.pth",  # averages every fold found
-    # "resnet34": "/kaggle/input/**/knee-weights-resnet34-fold*/**/best.pth",
+MODELS = {  # averages every fold found (one per fold; smoke-test checkpoints are skipped)
+    "effb0": ["/kaggle/input/*/*/knee-weights-effb0-fold*/**/best.pth",   # datasets/<user>/<name>/...
+              "/kaggle/input/knee-weights-effb0-fold*/**/best.pth"],       # older /kaggle/input/<name>/...
+    # "resnet34": ["/kaggle/input/*/*/knee-weights-resnet34-fold*/**/best.pth"],
 }
+print(f"COMP={COMP}\nCODE={CODE} (inference.py: {os.path.exists(os.path.join(CODE, 'inference.py'))})\nWHEELS={WHEELS}")
 ENSEMBLE_JSON = None  # with 2+ models: path to ensemble.json from `ensemble.py fit`; None = equal-weight mean
 TIME_BUDGET_HOURS = 8.0  # safety margin under the 9 h hard limit
 
@@ -47,6 +51,8 @@ if wheels:  # DICOM decoders for JPEG Lossless / JPEG 2000 transfer syntaxes
     subprocess.run([sys.executable, "-m", "pip", "install", "--no-index", "--find-links", WHEELS, "-q",
                     "pydicom", "pylibjpeg", "pylibjpeg-libjpeg", "pylibjpeg-openjpeg", "python-gdcm"], check=False)
 sys.path.insert(0, CODE)
+assert "recursive=True" in open(os.path.join(CODE, "inference.py")).read(), \
+    "knee-code is out of date: re-run the knee-code notebook (Save Version), then update this input to the new version"
 
 # %%
 from inference import run_inference

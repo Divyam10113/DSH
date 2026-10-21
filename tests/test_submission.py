@@ -109,3 +109,26 @@ def test_ensemble_fit_prefers_better_model():
 
     blended = blend({"good": good, "noise": noise}, weights)
     assert list(blended.columns) == [ID_COL] + ABNORMALITIES and len(blended) == n
+
+
+def test_load_models_kaggle_layout_dedupes_and_skips_smoke(tmp_path):
+    """Weights datasets mount at input/datasets/<user>/<name>/checkpoints/<run>/fold<k>/best.pth (several levels deep)."""
+    import torch
+    from inference import load_models
+
+    def put(user, dataset, run_name, fold):
+        d = tmp_path / "input" / "datasets" / user / dataset / "checkpoints" / run_name / f"fold{fold}"
+        d.mkdir(parents=True)
+        cfg = TrainConfig(backbone_name="resnet34", embed_dim=64, img_size=32, run_name=run_name, fold=fold)
+        save_weights(str(d / "best.pth"), build_model(cfg), cfg, 0.5, 1)
+
+    put("pranav", "knee-weights-effb0-fold0", "effb0_gated_concat", 0)
+    put("pranav", "knee-weights-effb0-fold0", "effb0_gated_concat_smoke", 0)   # smoke run in the same output
+    put("krish", "knee-weights-effb0-fold2", "effb0_gated_concat", 2)
+    put("divyam", "knee-weights-effb0-fold2b", "effb0_gated_concat", 2)        # fold 2 published twice
+    patterns = [str(tmp_path / "input" / "*" / "*" / "knee-weights-effb0-fold*" / "**" / "best.pth")]
+    groups = load_models({"effb0": patterns}, torch.device("cpu"))
+    assert len(groups["effb0"]) == 2  # fold 0 + fold 2, no smoke, no duplicate
+
+    with pytest.raises(FileNotFoundError):
+        load_models({"effb0": str(tmp_path / "nothing" / "**" / "best.pth")}, torch.device("cpu"))
