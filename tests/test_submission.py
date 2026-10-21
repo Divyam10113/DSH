@@ -132,3 +132,23 @@ def test_load_models_kaggle_layout_dedupes_and_skips_smoke(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         load_models({"effb0": str(tmp_path / "nothing" / "**" / "best.pth")}, torch.device("cpu"))
+
+
+def test_inference_keeps_float32_weights_and_handles_missing_plane_under_autocast(tmp_path):
+    """model.half() broke concat fusion (float32 zeros for a missing plane): 'mat1 and mat2 must have the same dtype'."""
+    import torch
+    from inference import load_models, predict_study
+
+    d = tmp_path / "w" / "fold0"
+    d.mkdir(parents=True)
+    cfg = TrainConfig(backbone_name="resnet34", embed_dim=64, img_size=32, fusion_type="concat")
+    save_weights(str(d / "best.pth"), build_model(cfg), cfg, 0.5, 1)
+    models = load_models({"m": str(tmp_path / "w" / "*" / "best.pth")}, torch.device("cpu"))["m"]
+    assert all(p.dtype == torch.float32 for p in models[0][0].parameters())
+
+    series = {"sagittal": torch.rand(6, 1, 32, 32), "coronal": torch.rand(5, 1, 32, 32)}  # no axial
+    pred = predict_study(models, series, torch.device("cpu"), tta=True)
+    assert pred.shape == (12,) and np.isfinite(pred).all()
+    with torch.no_grad(), torch.autocast("cpu", dtype=torch.bfloat16):  # mixed precision path, as on GPU
+        logits, _, _ = models[0][0]({k: v[None] for k, v in series.items()}, None)
+    assert torch.isfinite(logits.float()).all()

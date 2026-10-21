@@ -96,9 +96,9 @@ def load_models(model_globs: Dict[str, Union[str, List[str]]], device: torch.dev
             seen[key] = p
             model = build_model(cfg, pretrained=False)
             model.load_state_dict(state["model"])
+            # Weights stay float32; predict_study runs them under autocast, exactly as training did
+            # (model.half() breaks fusion layers that build float32 tensors for missing planes)
             model.to(device).eval()
-            if device.type == "cuda":
-                model.half()
             loaded.append((model, (cfg.img_size, cfg.img_size), cfg.max_slices))
             print(f"[inference] loaded {name}: {p} (backbone={cfg.backbone_name}, img={cfg.img_size}, fold={cfg.fold})")
         if not loaded:
@@ -112,17 +112,17 @@ def load_models(model_globs: Dict[str, Union[str, List[str]]], device: torch.dev
 def predict_study(models: List[Tuple[torch.nn.Module, Tuple[int, int], int]], series: Dict[str, torch.Tensor],
                   device: torch.device, tta: bool) -> np.ndarray:
     """Mean sigmoid over fold models (and horizontal-flip TTA) for one study -> (12,)."""
-    dtype = torch.float16 if device.type == "cuda" else torch.float32
     preds = []
     for model, size, _ in models:
         batch = {}
         for plane, t in series.items():
             if tuple(t.shape[-2:]) != size:
                 t = F.interpolate(t, size=size, mode="bilinear", align_corners=False)
-            batch[plane] = t[None].to(device, dtype)  # (1, K, 1, H, W)
+            batch[plane] = t[None].to(device, torch.float32)  # (1, K, 1, H, W)
         views = [batch] + ([{p: torch.flip(t, dims=[-1]) for p, t in batch.items()}] if tta else [])
         for view in views:
-            logits, _, _ = model(view, None)
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=device.type == "cuda"):
+                logits, _, _ = model(view, None)
             preds.append(torch.sigmoid(logits.float())[0].cpu().numpy())
     return np.mean(preds, axis=0)
 
@@ -215,8 +215,11 @@ def run_inference(
     sub = fallback[[ID_COL]].merge(blended, on=ID_COL, how="left")
     for c in ABNORMALITIES:
         fill = float(blended[c].mean()) if len(blended) else 0.5
-        sub[c] = sub[c].fillna(fill).clip(0.0, 1.0)
+        sub[c] = pd.to_numeric(sub[c], errors="coerce").fillna(fill).clip(0.0, 1.0)
     sub = sub[SUBMISSION_COLUMNS]
+    if study_ids and n_failed == len(study_ids):
+        print("[inference] WARNING: every study failed -> submission is all fallback scores (~0.5 AUC). "
+              "Fix the errors above before submitting.")
     validate_submission(sub, fallback[ID_COL].tolist())
     sub.to_csv(out_path, index=False)
     print(f"[inference] wrote {out_path}: {len(sub)} rows, failed={n_failed}, skipped={n_skipped}, "

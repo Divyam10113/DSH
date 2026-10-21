@@ -51,7 +51,7 @@ if wheels:  # DICOM decoders for JPEG Lossless / JPEG 2000 transfer syntaxes
     subprocess.run([sys.executable, "-m", "pip", "install", "--no-index", "--find-links", WHEELS, "-q",
                     "pydicom", "pylibjpeg", "pylibjpeg-libjpeg", "pylibjpeg-openjpeg", "python-gdcm"], check=False)
 sys.path.insert(0, CODE)
-assert "recursive=True" in open(os.path.join(CODE, "inference.py")).read(), \
+assert "torch.autocast" in open(os.path.join(CODE, "inference.py")).read(), \
     "knee-code is out of date: re-run the knee-code notebook (Save Version), then update this input to the new version"
 
 # %%
